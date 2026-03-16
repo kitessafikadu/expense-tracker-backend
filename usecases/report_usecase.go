@@ -9,8 +9,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// Daily Report Model
+type DailyReport struct {
+	Date			  string  `json:"date"`
+	TotalExpense      float64 `json:"total-expense"`
+	TotalLent         float64 `json:"total-lent"`
+	TotalBorrowed     float64 `json:"total-borrowed"`
+}
+
+
 type ReportUsecase interface {
 	GetWeeklyReport(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time) (WeeklyReport, error)
+	
+	GetDailyReport(ctx context.Context, userID uuid.UUID, date time.Time) (DailyReport, error)
 }
 
 var ErrInvalidDateRange = errors.New("end date must be on or after start date")
@@ -37,6 +48,34 @@ type reportUsecase struct {
 func NewReportUsecase(expenseRepo repository.ExpenseRepository, debtRepo repository.DebtReportRepository) ReportUsecase {
 	return &reportUsecase{expenseRepo: expenseRepo, debtRepo: debtRepo}
 }
+
+
+// Daily Usecase Logic
+func (r *reportUsecase) GetDailyReport(ctx context.Context, userID uuid.UUID, date time.Time) (DailyReport, error) {
+
+	totalExpense, err:= r.expenseRepo.SumByDateRange(ctx, userID, date, date)
+	if err != nil {
+		return DailyReport{}, err
+	}
+
+	totalLent, err:= r.debtRepo.SumByDateRangeAndType(ctx, userID, date, date, "lent")
+	if err != nil {
+		return DailyReport{}, err
+	}
+
+	totalBorrowed, err := r.debtRepo.SumByDateRangeAndType(ctx, userID, date, date, "borrowed")
+	if err != nil {
+		return DailyReport{}, err
+	}
+
+	return DailyReport{
+		Date:           date.Format("2006-01-02"),
+		TotalExpense:   totalExpense,
+		TotalLent:      totalLent,
+		TotalBorrowed:  totalBorrowed,
+	}, nil
+}
+
 
 func (r *reportUsecase) GetWeeklyReport(ctx context.Context, userID uuid.UUID, startDate, endDate time.Time) (WeeklyReport, error) {
 	if endDate.Before(startDate) {
